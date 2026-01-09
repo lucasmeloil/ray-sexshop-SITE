@@ -35,12 +35,17 @@ const router = Router();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '6mb' })); // Aumentado para suportar Base64 (limite do Netlify)
+app.use(express.urlencoded({ limit: '6mb', extended: true }));
 
 // --- HELPER FUNCTIONS ---
 
 const handleError = (res: Response, error: any) => {
     console.error('Backend Error:', error);
+    // Se o erro for de timeout ou conexão do Neon
+    if (error.message?.includes('fetch failed') || error.message?.includes('timeout')) {
+        return res.status(503).json({ error: 'Erro de conexão com o Banco de Dados. Tente novamente.' });
+    }
     res.status(500).json({ error: 'Internal Server Error', details: error.message });
 };
 
