@@ -4,6 +4,28 @@ import serverless from 'serverless-http';
 import { Pool } from 'pg';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa';
+
+// Neon Auth Configuration
+const NEON_JWKS_URI = 'https://ep-steep-truth-acuwp9wl.neonauth.sa-east-1.aws.neon.tech/neondb/auth/.well-known/jwks.json';
+
+const client = jwksClient({
+  jwksUri: NEON_JWKS_URI,
+  cache: true,
+  rateLimit: true,
+  jwksRequestsPerMinute: 5
+});
+
+function getKey(header: any, callback: any) {
+  client.getSigningKey(header.kid, function(err, key: any) {
+    if (err) {
+        callback(err);
+        return;
+    }
+    const signingKey = key.getPublicKey();
+    callback(null, signingKey);
+  });
+}
 
 // Initialize Express
 const app = express();
@@ -29,15 +51,19 @@ const handleError = (res: Response, error: any) => {
     res.status(500).json({ error: 'Internal Server Error', details: error.message });
 };
 
-// Middleware to authenticate JWT
+// Middleware to authenticate JWT via Neon Auth
 const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
   if (token == null) return res.sendStatus(401);
 
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-    if (err) return res.sendStatus(403);
+  // Validate token with Neon's Public Key (JWKS)
+  jwt.verify(token, getKey, { algorithms: ['RS256'] }, (err: any, user: any) => {
+    if (err) {
+        console.error("JWT Validation Error:", err.message);
+        return res.sendStatus(403);
+    }
     (req as any).user = user;
     next();
   });

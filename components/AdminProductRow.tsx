@@ -195,7 +195,15 @@ const AdminProductRow: React.FC<AdminProductRowProps> = ({ product, onUpdate, on
         )}
       </div>
       <div className="flex-grow text-center md:text-left">
-        <p className="font-bold text-gray-800 text-lg">{product.name} <span className="text-xs text-gray-500 font-normal">(SKU: {product.sku})</span></p>
+        <p className="font-bold text-gray-800 text-lg">
+          {product.name} 
+          <span className="text-xs text-gray-500 font-normal ml-2">(SKU: {product.sku})</span>
+          {product.isPromotion && (
+            <span className="ml-2 bg-red-100 text-red-600 text-[10px] font-black px-2 py-0.5 rounded-full uppercase border border-red-200">
+              Promoção
+            </span>
+          )}
+        </p>
         <p className="text-red-600 font-bold">{product.price} {product.originalPrice && <span className="text-gray-400 line-through text-sm ml-2 font-normal">{product.originalPrice}</span>}</p>
         <p className="text-sm text-gray-500 mt-1">{product.shortDescription}</p>
         {product.images && product.images.length > 1 && (

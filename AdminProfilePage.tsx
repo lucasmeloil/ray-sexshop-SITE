@@ -23,11 +23,10 @@ const AdminProfilePage: React.FC<AdminProfilePageProps> = ({ onAddAdmin, onUpdat
   const handlePasswordChange = (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordMessage({ type: '', text: '' });
-
-    if (currentPassword !== currentUser.password) {
-      setPasswordMessage({ type: 'error', text: 'A senha atual está incorreta.' });
-      return;
-    }
+/*
+    // SECURITY: The frontend no longer has access to the password hash.
+    // Password validation should happen on the backend if required.
+*/
     if (newPassword !== confirmPassword) {
       setPasswordMessage({ type: 'error', text: 'As novas senhas não coincidem.' });
       return;

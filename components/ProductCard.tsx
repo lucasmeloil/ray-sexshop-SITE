@@ -123,7 +123,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }) => {
       >
         {isPromotion && (
            <div className="absolute top-3 left-3 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md uppercase tracking-wider z-20">
-            -{(Math.random() * 20 + 10).toFixed(0)}%
+            {originalPrice ? (
+                `${Math.round(100 - (parseFloat(price.replace('R$ ', '').replace(',', '.')) / parseFloat(originalPrice.replace('R$ ', '').replace(',', '.')) * 100))}% OFF`
+            ) : 'PROMO'}
           </div>
         )}
         
