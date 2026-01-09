@@ -69,9 +69,22 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 
 // --- ROUTES ---
 
+// Health Check & Debug
+router.get('/health', async (req, res) => {
+    try {
+        console.log("Checking DB connection...");
+        const result = await sql`SELECT NOW()`;
+        res.json({ status: 'ok', time: result[0].now, env: !!process.env.DATABASE_URL });
+    } catch (err: any) {
+        console.error("Health check failed:", err);
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
 // 1. PRODUCTS ROUTES (Public Read, Protected Write)
 router.get('/products', async (req, res) => {
     try {
+        console.log("Fetching products...");
         const rows = await sql`SELECT * FROM products ORDER BY id DESC`;
         const products = rows.map(p => ({
             id: p.id,
@@ -92,6 +105,7 @@ router.get('/products', async (req, res) => {
 
 router.post('/products', authenticateToken, async (req, res) => {
     const { name, sku, category, price, originalPrice, imageUrl, images, description, shortDescription, isPromotion } = req.body;
+    console.log(`Creating product: ${name} (SKU: ${sku}). Image length: ${imageUrl?.length || 0}`);
     try {
         const rows = await sql`
             INSERT INTO products (name, sku, category, price, original_price, image_url, images, description, short_description, is_promotion)

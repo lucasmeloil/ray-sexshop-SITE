@@ -105,8 +105,25 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ onClose, onAdd }) => 
           {/* Image Column */}
           <div className="flex flex-col items-center justify-center gap-4 row-start-2 md:row-start-1">
             <img src={imageUrl} alt="Preview" className="w-48 h-48 object-cover rounded-lg border-2 border-red-300" />
+            <div className="w-full space-y-2">
+                <label htmlFor="image-url-input" className="block text-xs font-bold text-gray-700 text-center uppercase">URL da Imagem</label>
+                <input 
+                    id="image-url-input"
+                    type="text" 
+                    value={imageUrl.startsWith('data:') ? '' : imageUrl}
+                    onChange={e => setImageUrl(e.target.value)}
+                    placeholder="https://..."
+                    className={inputClass}
+                    disabled={isLoading}
+                />
+            </div>
+            <div className="flex items-center gap-2 w-full">
+                <div className="h-px bg-gray-200 flex-1"></div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase">ou</span>
+                <div className="h-px bg-gray-200 flex-1"></div>
+            </div>
             <label htmlFor="image-upload" className="cursor-pointer text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-500 file:text-white hover:file:bg-red-600">
-              Selecionar Imagem
+              Selecionar Arquivo Local
             </label>
             <input 
               id="image-upload"
