@@ -1,12 +1,14 @@
-
 import express, { Router, Request, Response, NextFunction } from 'express';
 import serverless from 'serverless-http';
-import { Pool } from 'pg';
+import { neon } from '@neondatabase/serverless';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
 
-// Neon Auth Configuration
+// Database Connection (Neon Serverless)
+const sql = neon(process.env.DATABASE_URL!);
+
+// Neon Auth Configuration (JWKS)
 const NEON_JWKS_URI = 'https://ep-steep-truth-acuwp9wl.neonauth.sa-east-1.aws.neon.tech/neondb/auth/.well-known/jwks.json';
 
 const client = jwksClient({
@@ -34,15 +36,6 @@ const router = Router();
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// JWT Secret (Should be in env, fallback for demo)
-const JWT_SECRET = process.env.JWT_SECRET || 'nexus-secret-key-change-in-prod';
-
-// Database Connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
 
 // --- HELPER FUNCTIONS ---
 
@@ -74,7 +67,7 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 // 1. PRODUCTS ROUTES (Public Read, Protected Write)
 router.get('/products', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM products ORDER BY id DESC');
+        const rows = await sql`SELECT * FROM products ORDER BY id DESC`;
         const products = rows.map(p => ({
             id: p.id,
             name: p.name,
@@ -95,13 +88,11 @@ router.get('/products', async (req, res) => {
 router.post('/products', authenticateToken, async (req, res) => {
     const { name, sku, category, price, originalPrice, imageUrl, images, description, shortDescription, isPromotion } = req.body;
     try {
-        const query = `
+        const rows = await sql`
             INSERT INTO products (name, sku, category, price, original_price, image_url, images, description, short_description, is_promotion)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES (${name}, ${sku}, ${category}, ${price}, ${originalPrice}, ${imageUrl}, ${images}, ${description}, ${shortDescription}, ${isPromotion})
             RETURNING *
         `;
-        const values = [name, sku, category, price, originalPrice, imageUrl, images, description, shortDescription, isPromotion];
-        const { rows } = await pool.query(query, values);
         res.status(201).json(rows[0]);
     } catch (err) { handleError(res, err); }
 });
@@ -110,14 +101,12 @@ router.put('/products/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { name, sku, category, price, originalPrice, imageUrl, images, description, shortDescription, isPromotion } = req.body;
     try {
-        const query = `
+        const rows = await sql`
             UPDATE products 
-            SET name=$1, sku=$2, category=$3, price=$4, original_price=$5, image_url=$6, images=$7, description=$8, short_description=$9, is_promotion=$10
-            WHERE id=$11
+            SET name=${name}, sku=${sku}, category=${category}, price=${price}, original_price=${originalPrice}, image_url=${imageUrl}, images=${images}, description=${description}, short_description=${shortDescription}, is_promotion=${isPromotion}
+            WHERE id=${id}
             RETURNING *
         `;
-        const values = [name, sku, category, price, originalPrice, imageUrl, images, description, shortDescription, isPromotion, id];
-        const { rows } = await pool.query(query, values);
         
         if (rows.length === 0) return res.status(404).json({ error: 'Product not found' });
         
@@ -141,62 +130,15 @@ router.put('/products/:id', authenticateToken, async (req, res) => {
 router.delete('/products/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     try {
-        await pool.query('DELETE FROM products WHERE id = $1', [id]);
+        await sql`DELETE FROM products WHERE id = ${id}`;
         res.json({ message: 'Product deleted' });
     } catch (err) { handleError(res, err); }
 });
 
 // 2. ADMINS ROUTES
-router.post('/admins/login', async (req, res) => {
-    const { email, password } = req.body;
-    
-    // BACKEND AUTO-SEEDING for requested user
-    // This ensures credentials work even on a fresh DB
-    if (email === 'lucasmelo@nexus.com' && password === 'lucas102030') {
-        try {
-             // Try to find user
-             const { rows } = await pool.query('SELECT * FROM admins WHERE email = $1', [email]);
-             if (rows.length === 0) {
-                 // Create if missing
-                 console.log("Seeding master admin...");
-                 await pool.query('INSERT INTO admins (email, password) VALUES ($1, $2)', [email, password]);
-             }
-        } catch (e) {
-            console.error("Auto-seed error", e);
-        }
-    }
-
-    try {
-        // Find user
-        const { rows } = await pool.query('SELECT * FROM admins WHERE email = $1 AND password = $2', [email, password]);
-        
-        if (rows.length > 0) {
-            const user = rows[0];
-            
-            // Generate JWT
-            const token = jwt.sign(
-                { id: user.id, email: user.email },
-                JWT_SECRET,
-                { expiresIn: '12h' }
-            );
-
-            // Return token and user WITHOUT password
-            res.json({
-                token,
-                user: {
-                    id: user.id,
-                    email: user.email
-                }
-            });
-        } else {
-            res.status(401).json({ error: 'Invalid credentials' });
-        }
-    } catch (err) { handleError(res, err); }
-});
-
 router.get('/admins', authenticateToken, async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT id, email FROM admins');
+        const rows = await sql`SELECT id, email FROM admins`;
         res.json(rows);
     } catch (err) { handleError(res, err); }
 });
@@ -204,7 +146,7 @@ router.get('/admins', authenticateToken, async (req, res) => {
 router.post('/admins', authenticateToken, async (req, res) => {
     const { email, password } = req.body;
     try {
-        const { rows } = await pool.query('INSERT INTO admins (email, password) VALUES ($1, $2) RETURNING id, email', [email, password]);
+        const rows = await sql`INSERT INTO admins (email, password) VALUES (${email}, ${password}) RETURNING id, email`;
         res.status(201).json(rows[0]);
     } catch (err) { handleError(res, err); }
 });
@@ -213,7 +155,7 @@ router.put('/admins/:id/password', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { password } = req.body;
     try {
-        await pool.query('UPDATE admins SET password = $1 WHERE id = $2', [password, id]);
+        await sql`UPDATE admins SET password = ${password} WHERE id = ${id}`;
         res.json({ message: 'Password updated' });
     } catch (err) { handleError(res, err); }
 });
@@ -221,7 +163,7 @@ router.put('/admins/:id/password', authenticateToken, async (req, res) => {
 // 3. SLIDES ROUTES (Public Read, Protected Write)
 router.get('/slides', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM slides ORDER BY id ASC');
+        const rows = await sql`SELECT * FROM slides ORDER BY id ASC`;
         const slides = rows.map(s => ({
             id: s.id,
             imageUrl: s.image_url,
@@ -236,10 +178,7 @@ router.get('/slides', async (req, res) => {
 router.post('/slides', authenticateToken, async (req, res) => {
     const { imageUrl, title, subtitle, buttonText } = req.body;
     try {
-        const { rows } = await pool.query(
-            'INSERT INTO slides (image_url, title, subtitle, button_text) VALUES ($1, $2, $3, $4) RETURNING *',
-            [imageUrl, title, subtitle, buttonText]
-        );
+        const rows = await sql`INSERT INTO slides (image_url, title, subtitle, button_text) VALUES (${imageUrl}, ${title}, ${subtitle}, ${buttonText}) RETURNING *`;
         const s = rows[0];
         res.status(201).json({
             id: s.id,
@@ -255,10 +194,7 @@ router.put('/slides/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { imageUrl, title, subtitle, buttonText } = req.body;
     try {
-        const { rows } = await pool.query(
-            'UPDATE slides SET image_url=$1, title=$2, subtitle=$3, button_text=$4 WHERE id=$5 RETURNING *',
-            [imageUrl, title, subtitle, buttonText, id]
-        );
+        const rows = await sql`UPDATE slides SET image_url=${imageUrl}, title=${title}, subtitle=${subtitle}, button_text=${buttonText} WHERE id=${id} RETURNING *`;
         const s = rows[0];
         res.json({
             id: s.id,
@@ -273,7 +209,7 @@ router.put('/slides/:id', authenticateToken, async (req, res) => {
 router.delete('/slides/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     try {
-        await pool.query('DELETE FROM slides WHERE id = $1', [id]);
+        await sql`DELETE FROM slides WHERE id = ${id}`;
         res.json({ message: 'Slide deleted' });
     } catch (err) { handleError(res, err); }
 });
@@ -281,7 +217,7 @@ router.delete('/slides/:id', authenticateToken, async (req, res) => {
 // 4. PAGE BANNERS ROUTES (Public Read, Protected Write)
 router.get('/page-banners', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM page_banners');
+        const rows = await sql`SELECT * FROM page_banners`;
         const banners = rows.map(b => ({
             pageId: b.page_id,
             imageUrl: b.image_url,
@@ -295,13 +231,13 @@ router.get('/page-banners', async (req, res) => {
 router.put('/page-banners', authenticateToken, async (req, res) => {
     const { pageId, imageUrl, title, subtitle } = req.body;
     try {
-        const { rows } = await pool.query(`
+        const rows = await sql`
             INSERT INTO page_banners (page_id, image_url, title, subtitle)
-            VALUES ($1, $2, $3, $4)
+            VALUES (${pageId}, ${imageUrl}, ${title}, ${subtitle})
             ON CONFLICT (page_id) 
             DO UPDATE SET image_url = EXCLUDED.image_url, title = EXCLUDED.title, subtitle = EXCLUDED.subtitle
             RETURNING *
-        `, [pageId, imageUrl, title, subtitle]);
+        `;
         
         const b = rows[0];
         res.json({
